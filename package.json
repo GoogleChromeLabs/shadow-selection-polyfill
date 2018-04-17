@@ -1,0 +1,13 @@
+{
+  "name": "shadow-selection-polyfill",
+  "version": "1.0.0",
+  "description": "Polyfill for shadowRoot.getSelection in Safari 10+",
+  "main": "shadow.js",
+  "jsnext:main": "shadow.js",
+  "module": "shadow.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GoogleChromeLabs/shadow-selection-polyfill.git"
+  },
+  "license": "Apache-2.0"
+}
