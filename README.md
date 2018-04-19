@@ -1,5 +1,5 @@
 Polyfill for the `shadowRoot.getSelection()` method for Safari 10+.
-[See a demo](https://)!
+[See a demo](https://googlechromelabs.github.io/shadow-selection-polyfill/demo.html)!
 
 Safari supports `.attachShadow()` to create a Shadow Root, but does not support programatically retrieving user selection within this root.
 
@@ -41,5 +41,8 @@ const {getShadowRootSelectionRange} = require('shadow-selection-polyfill');
 ```
 
 ## Other
+
+This isn't technically a polyfill, as it adds a new method: it doesn't patch an existing method.
+There's nothing stopping us from emulating a faux-Selection, but it would probably make the code more complex than required.
 
 This is not an official Google product.
