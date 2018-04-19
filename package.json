@@ -5,9 +5,19 @@
   "main": "shadow.js",
   "jsnext:main": "shadow.js",
   "module": "shadow.js",
+  "author": "The Chromium Authors",
+  "bugs": {
+    "url": "https://github.com/GoogleChromeLabs/shadow-selection-polyfill/issues"
+  },
+  "homepage": "https://github.com/GoogleChromeLabs/shadow-selection-polyfill",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/GoogleChromeLabs/shadow-selection-polyfill.git"
   },
+  "keywords": [
+    "shadowdom",
+    "selection",
+    "safari"
+  ],
   "license": "Apache-2.0"
 }
