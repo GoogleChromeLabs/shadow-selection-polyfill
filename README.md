@@ -23,14 +23,14 @@ root.innerHTML = `...`;
 document.addEventListener('-shadow-selectionchange', () => {
   const range = getShadowRootSelectionRange(root);
   if (range) {
-    console.info('range selected within root element`, range.toString());
+    console.info('range selected within root element', range.toString());
   }
 });
 ```
 
 ## Install
 
-Install via NPM as `shadow-selection-polyfill`.
+Install via NPM as `shadow-selection-polyfill`, this has no dependencies.
 Depending on your transpiler, you might be able to include the polyfill with:
 
 ```js
