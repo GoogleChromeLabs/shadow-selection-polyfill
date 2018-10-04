@@ -298,7 +298,7 @@ export function getRange(root) {
   window.setTimeout(() => {
     cachedRange.delete(root);
   }, 0);
-  console.debug('getRange got', result);
+  debug && console.debug('getRange got', result);
   return result.range;
 }
 
