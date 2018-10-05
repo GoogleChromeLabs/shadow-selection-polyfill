@@ -4,6 +4,7 @@ Polyfill for the `shadowRoot.getSelection()` method for Safari 10+.
 Safari supports `.attachShadow()` to create a Shadow Root, but does not support programatically retrieving user selection within this root.
 
 ⚠️ As of April 2018, this polyfill only supports Safari, but is safe to include in other browsers supporting Shadow DOM (e.g. Chrome).
+⚠️ As of October 2018, Firefox 63 (beta) does not implement `getSelection()` on the Shadow Root, see https://bugzilla.mozilla.org/show_bug.cgi?id=1430308. However, document level API still works within shadow trees, and this polyfill is not needed.
 
 ## Usage
 
