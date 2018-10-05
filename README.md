@@ -7,7 +7,7 @@ Safari supports `.attachShadow()` to create a Shadow Root, but does not support 
 
 ## Usage
 
-Include `./shadow.js` as an ES6 module, and call its `getShadowRootSelectionRange` method, passing the relevant shadow root.
+Include `./shadow.js` as an ES6 module, and call its `getRange` method, passing the relevant shadow root.
 On browsers that implement `shadowRoot.getSelection()`, this uses the native implementation.
 
 Typically, you'd call this method in response to a `selectionchange` event, which is a global event on the document.
@@ -15,13 +15,13 @@ However, this polyfill will cause additional `selectionchange` events to fire in
 Instead, you can listen to the `-shadow-selectionchange` event, which will safely fire only once.
 
 ```js
-import {getShadowRootSelectionRange} from './node_modules/shadow-selection-polyfill/shadow.js';
+import {getRange} from './node_modules/shadow-selection-polyfill/shadow.js';
 
 const root = myElement.createShadowRoot({mode: 'open'});
 root.innerHTML = `...`;
 
 document.addEventListener('-shadow-selectionchange', () => {
-  const range = getShadowRootSelectionRange(root);
+  const range = getRange(root);
   if (range) {
     console.info('range selected within root element', range.toString());
   }
@@ -35,9 +35,9 @@ Depending on your transpiler, you might be able to include the polyfill with:
 
 ```js
 // naked imports
-import {getShadowRootSelectionRange} from `shadow-selection-polyfill`;
+import {getRange} from `shadow-selection-polyfill`;
 // require() compatibility
-const {getShadowRootSelectionRange} = require('shadow-selection-polyfill');
+const {getRange} = require('shadow-selection-polyfill');
 ```
 
 ## Other
