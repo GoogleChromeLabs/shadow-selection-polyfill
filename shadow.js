@@ -16,6 +16,13 @@
 
 const debug = false;
 
+const hasShadow = 'attachShadow' in Element.prototype && 'getRootNode' in Element.prototype;
+const hasSelection = !!(hasShadow && document.createElement('div').attachShadow({ mode: 'open' }).getSelection);
+const hasShady = window.ShadyDOM && window.ShadyDOM.inUse;
+const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent) ||
+  /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+const useDocument = !hasShadow || hasShady || (!hasSelection && !isSafari);
+
 const validNodeTypes = [Node.ELEMENT_NODE, Node.TEXT_NODE, Node.DOCUMENT_FRAGMENT_NODE];
 function isValidNode(node) {
   return validNodeTypes.includes(node.nodeType);
@@ -52,10 +59,8 @@ function findNode(s, parentNode, isLeft) {
  * @param {function(!Event)} fn to add to selectionchange internals
  */
 const addInternalListener = (() => {
-  const testNode = document.createElement('div');
-  const testRoot = testNode.attachShadow({mode: 'open'});
-  if (testRoot.getSelection) {
-    // getSelection really exists, why are you using us?
+  if (hasSelection || useDocument) {
+    // getSelection exists or document API can be used
     document.addEventListener('selectionchange', (ev) => {
       document.dispatchEvent(new CustomEvent('-shadow-selectionchange'));
     });
@@ -270,8 +275,8 @@ function ignoredTrailingSpace(node) {
 
 const cachedRange = new Map();
 export function getRange(root) {
-  if (root.getSelection) {
-    const s = root.getSelection();
+  if (hasSelection || useDocument) {
+    const s = (useDocument ? document : root).getSelection();
     return s.rangeCount ? s.getRangeAt(0) : null;
   }
 
