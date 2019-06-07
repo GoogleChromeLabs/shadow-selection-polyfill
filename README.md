@@ -42,6 +42,10 @@ import {getRange} from `shadow-selection-polyfill`;
 const {getRange} = require('shadow-selection-polyfill');
 ```
 
+## Implementation
+
+This polyfill basically rapidly modifies the selection by walking left and right until it can find out just how many characters from the 'edge' of a Shadow Root that a user has selected. It uses this combined with a few other tricks to come up with a range.
+
 ## Other
 
 This isn't technically a polyfill, as it adds a new method: it doesn't patch an existing method.
