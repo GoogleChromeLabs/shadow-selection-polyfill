@@ -68,6 +68,15 @@ document.addEventListener('-shadow-selectionchange', () => {
   out2.textContent = formatRange(ss2);
 });
 
+extendForward.addEventListener('click', () => {
+  window.getSelection().modify('extend', 'forward', 'character');
+  console.info('step');
+});
+
+extendBackward.addEventListener('click', () => {
+  window.getSelection().modify('extend', 'backward', 'character');
+});
+
   </script>
   <style>
     body {
@@ -99,10 +108,12 @@ document.addEventListener('-shadow-selectionchange', () => {
   <li>root2 selection: <span id="out2"></span></li>
 </ul>
 
+<button id="extendForward">Extend Forwards</button>
+<button id="extendBackward">Extend Backwards</button>
+
 <main>
-firstBlah
 <div>
-  ssssContent is below me<br />
+  Content is below me<br />
 </div>
 <div id="host1">
   I'm some content in the DOM
