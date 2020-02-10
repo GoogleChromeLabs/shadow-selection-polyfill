@@ -25,54 +25,53 @@ const useDocument = !hasShadow || hasShady || (!hasSelection && !isSafari);
 
 const invalidPartialElements = /^(area|base|br|col|command|embed|hr|img|input|keygen|link|meta|param|script|source|style|template|track|wbr)$/;
 
+export const eventName = '-shadow-selectionchange';
+
+
 const validNodeTypes = [Node.ELEMENT_NODE, Node.TEXT_NODE, Node.DOCUMENT_FRAGMENT_NODE];
 function isValidNode(node) {
   return validNodeTypes.includes(node.nodeType);
 }
 
 
-function findCaretFocus(s, node) {
-  const nodes = node.childNodes;
-  if (!nodes) {
-    return node;
-  }
-
-  for (let i = 0; i < nodes.length; ++i) {
-    const childNode = nodes[i];
-    if (!isValidNode(childNode)) {
-      continue;
-    }
-
-    if (s.containsNode(childNode, true)) {
-      return findCaretFocus(s, childNode);
-    } else if (childNode.shadowRoot) {
-      const shadowResult = findCaretFocus(s, childNode.shadowRoot);
-      if (shadowResult) {
-        return shadowResult;
+/**
+ * @param {!Selection} s selection to use
+ * @param {!Node} node to find caret position within a shadow root
+ * @return {!Node|!ShadowRoot}
+ */
+export function findCaretFocus(s, node) {
+  const pending = [];
+  const pushAll = (nodeList) => {
+    for (let i = 0; i < nodeList.length; ++i) {
+      if (nodeList[i].shadowRoot) {
+        pending.push(nodeList[i].shadowRoot);
       }
     }
-  }
+  };
 
-  // This is gross, but if we can't find a match, then it's probably going to be within a
-  // further shadow root. Let's hope that folks aren't wrapping their whole site in one.
-  if (node instanceof window.ShadowRoot) {
-    const all = node.querySelectorAll('*');
-    for (let i = 0; i < all.length; ++i) {
-      if (all[i].shadowRoot) {
-        const shadowResult = findCaretFocus(s, all[i].shadowRoot);
-        if (shadowResult) {
-          return shadowResult;
-        }
+  // We're told by Safari that a node containing a child with a Shadow Root is selected, but check
+  // the node directly too (just in case they change their mind later).
+  if (node.shadowRoot) {
+    pending.push(node.shadowRoot);
+  }
+  pushAll(node.childNodes);
+
+  while (pending.length) {
+    const root = pending.shift();
+
+    for (let i = 0; i < root.childNodes.length; ++i) {
+      if (s.containsNode(root.childNodes[i], true)) {
+        return root;
       }
     }
+
+    // The selection must be inside a further Shadow Root, but there's no good way to get a list of
+    // them. Safari won't tell you what regular node contains the root which has a selection. So,
+    // unfortunately if you stack them this will be slow(-ish).
+    pushAll(root.querySelectorAll('*'));
   }
 
-  const root = node.getRootNode();
-  if (root instanceof ShadowRoot) {
-    return root;
-  }
-
-  return node;
+  return null;
 }
 
 
@@ -114,7 +113,7 @@ let recentCaretRange = {node: null, offset: -1};
   if (hasSelection || useDocument) {
     // getSelection exists or document API can be used
     document.addEventListener('selectionchange', (ev) => {
-      document.dispatchEvent(new CustomEvent('-shadow-selectionchange'));
+      document.dispatchEvent(new CustomEvent(eventName));
     });
     return () => {};
   }
@@ -276,7 +275,7 @@ export function getRange(root) {
 }
 
 
-export function internalGetShadowSelection(root) {
+function internalGetShadowSelection(root) {
   // nb. We used to check whether the selection contained the host, but this broke in Safari 13.
   // This is "nicely formatted" whitespace as per the browser's renderer. This is fine, and we only
   // provide selection information at this granularity.
