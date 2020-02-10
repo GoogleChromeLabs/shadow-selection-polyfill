@@ -74,28 +74,28 @@ const addInternalListener = (() => {
     if (withinInternals) {
       return;
     }
-    document.dispatchEvent(new CustomEvent('-shadow-selectionchange'));
+
     withinInternals = true;
-    window.setTimeout(() => {
+
+    document.dispatchEvent(new CustomEvent('-shadow-selectionchange'));
+    window.requestAnimationFrame(() => {
       withinInternals = false;
-    }, 0);
+    });
+
     handlers.forEach((fn) => fn(ev));
   });
 
   return (fn) => handlers.push(fn);
 })();
 
-let wasCaret = false;
-let resolveTask = null;
 addInternalListener((ev) => {
   const s = window.getSelection();
   if (s.type === 'Caret') {
-    wasCaret = true;
-  } else if (wasCaret && !resolveTask) {
-    resolveTask = Promise.resolve(true).then(() => {
-      wasCaret = false;
-      resolveTask = null;
-    });
+    // nb. This is important, it mucks with single-positioned selections enough to make ranges work
+    s.collapseToEnd();
+    s.collapseToStart();
+    s.empty();
+    s.deleteFromDocument();
   }
 });
 
@@ -137,16 +137,6 @@ function getSelectionDirection(s, leftNode, rightNode) {
 
   const initialSize = measure();
   debug && console.info(`initial selection: "${s.toString()}"`)
-
-  if (initialSize === 1 && wasCaret && leftNode === rightNode) {
-    // nb. We need to reset a single selection as Safari _always_ tells us the cursor was dragged
-    // left to right (maybe RTL on those devices).
-    // To be fair, Chrome has the same bug.
-    debug && console.debug('resetting size=1');
-    s.extend(leftNode, 0);
-    s.collapseToEnd();
-    return undefined;
-  }
 
   let updatedSize;
 
@@ -206,72 +196,6 @@ function walkFromNode(node, walkForward) {
   return null;
 }
 
-/**
- * @param {!Node} node to start from
- * @param {boolean} isLeft is this a left node
- * @param {string} s expected string
- * @return {?{node: !Node, offset: number}}
- */
-function walkTextFromNode(node, isLeft, s) {
-  for (; node; node = walkFromNode(node, isLeft)) {
-    if (node.nodeType !== Node.TEXT_NODE) {
-      continue;
-    }
-
-    const t = node.textContent;
-    if (isLeft) {
-      if (s.length < t.length) {
-        return {node, offset: s.length};
-      }
-
-      const prefix = s.substr(0, t.length);
-      if (prefix !== t) {
-        console.debug('unexpected string prefix', prefix, 'expected', t)
-      }
-
-      s = s.substr(t.length);
-    } else {
-      if (s.length < t.length) {
-        return {node, offset: t.length - s.length};
-      }
-
-      const suffix = s.substr(s.length - t.length);
-      if (suffix !== t) {
-        console.debug('unexpected string suffix', suffix, 'expected', t)
-      }
-
-      s = s.substr(0, s.length - t.length);
-    }
-  }
-
-  return null;  // too far
-}
-
-/**
- * @param {!Node} node
- * @return {number} count of initial space
- */
-function initialSpace(node) {
-  if (node.nodeType !== Node.TEXT_NODE) {
-    return 0;
-  }
-  return /^\s*/.exec(node.textContent)[0].length;
-}
-
-/**
- * @param {!Node} node
- * @return {number} count of ignored trailing space
- */
-function ignoredTrailingSpace(node) {
-  if (node.nodeType !== Node.TEXT_NODE) {
-    return 0;
-  }
-  const trailingSpaceCount =  /\s*$/.exec(node.textContent)[0].length;
-  if (!trailingSpaceCount) {
-    return 0;
-  }
-  return trailingSpaceCount - 1;  // always allow single last
-}
 
 const cachedRange = new Map();
 export function getRange(root) {
@@ -285,19 +209,7 @@ export function getRange(root) {
     return thisFrame;
   }
 
-  const initialText = window.getSelection().toString();
   const result = internalGetShadowSelection(root);
-  const rs = result.range && result.range.toString() || null;
-  if (rs !== null && rs !== initialText) {
-    // TODO: sometimes triggers on single-char hack etc
-
-    if (rs.replace(/\s/g, '') !== initialText.replace(/\s/g, '')) {
-      // nb. selection eats initial/ending space, range does not: if whitespace is the only
-      // difference, then ignore
-      console.warn('invalid range, initial text:', initialText);
-      console.warn('vs', rs, result.mode, result.range);
-    }
-  }
 
   cachedRange.set(root, result.range);
   window.setTimeout(() => {
@@ -307,114 +219,128 @@ export function getRange(root) {
   return result.range;
 }
 
-const fakeSelectionNode = document.createTextNode('');
-export function internalGetShadowSelection(root) {
-  const range = document.createRange();
 
+export function internalGetShadowSelection(root) {
+  // nb. We used to check whether the selection contained the host, but this broke in Safari 13.
+  // This is "nicely formatted" whitespace as per the browser's renderer. This is fine, and we only
+  // provide selection information at this granularity.
   const s = window.getSelection();
-  if (!s.containsNode(root.host, true)) {
+
+  if (s.type === 'None') {
+    return {range: null, type: 'none'};
+  } else if (!(s.type === 'Caret' || s.type === 'Range')) {
+    throw new TypeError('unexpected type: ' + s.type);
+  }
+
+  const leftNode = findNode(s, root, true);
+  if (leftNode === root) {
     return {range: null, mode: 'none'};
   }
 
-  // TODO: inserting fake nodes isn't ideal, but containsNode doesn't work on nearby adjacent
-  // text nodes (in fact it returns true for all text nodes on the page?!).
+  const range = document.createRange();
 
-  // insert a fake 'before' node to see if it's selected
-  root.insertBefore(fakeSelectionNode, root.childNodes[0]);
-  const includesBeforeRoot = s.containsNode(fakeSelectionNode);
-  fakeSelectionNode.remove();
-  if (includesBeforeRoot) {
-    return {range: null, mode: 'outside-before'};
-  }
-
-  // insert a fake 'after' node to see if it's selected
-  root.appendChild(fakeSelectionNode);
-  const includesAfterRoot = s.containsNode(fakeSelectionNode);
-  fakeSelectionNode.remove();
-  if (includesAfterRoot) {
-    return {range: null, mode: 'outside-after'};
-  }
-
-  const measure = () => s.toString().length;
-  const initialSelectionContent = s.toString();
-  if (!(s.type === 'Caret' || s.type === 'Range')) {
-    throw new TypeError('unexpected type: ' + s.type);
-  }
-  const initialCaret = (s.type === 'Caret');
-
-  const leftNode = findNode(s, root, true);
-  let rightNode;
+  let rightNode = null;
   let isNaturalDirection = undefined;
   if (s.type === 'Range') {
     rightNode = findNode(s, root, false);  // get right node here _before_ getSelectionDirection
     isNaturalDirection = getSelectionDirection(s, leftNode, rightNode);
     // isNaturalDirection means "going right"
-  }
 
-  if (s.type === 'Caret') {
-    // we might transition to being a caret, so don't check initial value
-    s.extend(leftNode, 0);
-    const at = measure();
-    s.collapseToEnd();
-
-    range.setStart(leftNode, at);
-    range.setEnd(leftNode, at);
-    return {range, mode: 'caret'};
-  } else if (isNaturalDirection === undefined) {
-    if (s.type !== 'Range') {
-      throw new TypeError('unexpected type: ' + s.type);
+    if (isNaturalDirection === undefined) {
+      // This occurs when we can't move because we can't extend left or right to measure the
+      // direction we're moving in. Good news though: we don't need to _change_ the selection
+      // to measure it, so just return immediately.
+      range.setStart(leftNode, 0);
+      range.setEnd(rightNode, rightNode.length);
+      return {range, mode: 'all'};
     }
-    // This occurs when we can't move because we can't extend left or right to measure the
-    // direction we're moving in. Good news though: we don't need to _change_ the selection
-    // to measure it, so just return immediately.
-    range.setStart(leftNode, 0);
-    range.setEnd(rightNode, rightNode.length);
-    return {range, mode: 'all'};
   }
 
-  const size = measure();
-  let offsetLeft, offsetRight;
 
-// only one newline/space char is cared about
-  const validRightLength = rightNode.length - ignoredTrailingSpace(rightNode);
+  // Dumbest possible approach: remove characters from left side until no more selection,
+  // re-add.
 
-  if (isNaturalDirection) {
-    // walk in the opposite direction first
-    s.extend(leftNode, 0);
-    offsetLeft = measure() + initialSpace(leftNode);  // measure doesn't include initial space
+  // Try right side first, as we can trim characters until selection gets shorter.
 
-    // then in our actual direction
-    s.extend(rightNode, validRightLength);
-    offsetRight = validRightLength - (measure() - size);
+  let leftOffset = 0;
+  let rightOffset = 0;
 
-    // then revert to the original position
-    s.extend(rightNode, offsetRight);
+  if (rightNode === null) {
+    // This is a caret selection, do nothing.
+  } else if (rightNode.nodeType === Node.TEXT_NODE) {
+    const rightText = rightNode.textContent;
+    const initialSize = s.toString().length;
+    const existingNextSibling = rightNode.nextSibling;
+
+    for (let i = rightText.length - 1; i >= 0; --i) {
+      rightNode.splitText(i);
+      const updatedSize = s.toString().length;
+      if (updatedSize !== initialSize) {
+        rightOffset = i + 1;
+        break;
+      }
+    }
+
+    // We don't use .normalize() here, as the user might already have a weird node arrangement
+    // they need to maintain.
+    rightNode.insertData(rightNode.length, rightText.substr(rightNode.length));
+    while (rightNode.nextSibling !== existingNextSibling) {
+      rightNode.nextSibling.remove();
+    }
+  }
+
+  if (leftNode.nodeType === Node.TEXT_NODE) {
+    if (leftNode !== rightNode) {
+      s.collapseToStart();
+      s.modify('extend', 'forward', 'character');
+    }
+
+    const leftText = leftNode.textContent;
+    const existingNextSibling = leftNode.nextSibling;
+
+    const start = (leftNode === rightNode ? rightOffset : leftText.length - 1);
+
+    for (let i = start; i >= 0; --i) {
+      leftNode.splitText(i);
+      if (s.toString() === '') {
+        leftOffset = i;
+        break;
+      }
+    }
+
+    // As above, we don't want to use .normalize().
+    leftNode.insertData(leftNode.length, leftText.substr(leftNode.length));
+    while (leftNode.nextSibling !== existingNextSibling) {
+      leftNode.nextSibling.remove();
+    }
+
+    if (rightNode === null) {
+      rightNode = leftNode;
+      rightOffset = leftOffset;
+    }
+  }
+
+  if (leftNode === rightNode) {
+    console.info('got range', leftNode.textContent.substring(leftOffset, rightOffset), 'nat?', isNaturalDirection);
   } else {
-    // walk in the opposite direction first
-    s.extend(rightNode, validRightLength);
-    offsetRight = validRightLength - measure();
-
-    // then in our actual direction
-    s.extend(leftNode, 0);
-    offsetLeft = measure() - size + initialSpace(leftNode);  // doesn't include initial space
-
-    // then revert to the original position
-    s.extend(leftNode, offsetLeft);
+    console.warn('wide range');
   }
 
-  if (debug) {
-    if (leftNode === rightNode) {
-      console.info('got string', leftNode.textContent.substr(offsetLeft, offsetRight - offsetLeft));
+  if (isNaturalDirection === true) {
+    s.collapse(leftNode, leftOffset);
+    s.extend(rightNode, rightOffset);
+  } else if (isNaturalDirection === false) {
+    s.collapse(rightNode, rightOffset);
+    s.extend(leftNode, leftOffset);
+  } else {
+    if (leftNode !== rightNode) {
+      console.warn('cannot do anything with selection', leftOffset, rightOffset);
     } else {
-      console.info('>>> string', leftNode.textContent.substr(offsetLeft));
-      console.info('<<< string', rightNode.textContent.substr(0, offsetRight));
+      s.setPosition(leftNode, leftOffset);
     }
   }
 
-  range.setStart(leftNode, offsetLeft);
-  range.setEnd(rightNode, offsetRight);
-  return {
-    mode: isNaturalDirection ? 'right' : 'left',
-    range,
-  };
+  range.setStart(leftNode, leftOffset);
+  range.setEnd(rightNode, rightOffset);
+  return {range, mode: 'normal'};
 }

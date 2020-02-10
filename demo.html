@@ -22,18 +22,18 @@ import * as shadow from './shadow.js';
 
 const root1 = host1.attachShadow({mode: 'open'});
 host1.style.border = 'blue 4px solid';
-root1.innerHTML = `
+root1.innerHTML = `Starts with space,  but simplest text possible
 
+<style type="ignored">x</style>
 
-Starts with space, but simplest text possible
-
-<strong>stronger</strong><div style="background: #eee"><slot></slot></div><-- slot<div id="host2"></div>
+<strong>stronger</strong> <em>@</em> q<div style="background: #eee"><slot></slot></div><-- slot<div id="host2"></div>
 More DOM text nodes`;
 
 const host2 = root1.getElementById('host2');
 host2.style.border = 'red 4px solid';
 const root2 = host2.attachShadow({mode: 'open'});
 root2.innerHTML = `<div>Second layer is weird <img data-first src="data:image/gif;base64,R0lGODlhEAAQAMQAAORHHOVSKudfOulrSOp3WOyDZu6QdvCchPGolfO0o/XBs/fNwfjZ0frl3/zy7////wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACH5BAkAABAALAAAAAAQABAAAAVVICSOZGlCQAosJ6mu7fiyZeKqNKToQGDsM8hBADgUXoGAiqhSvp5QAnQKGIgUhwFUYLCVDFCrKUE1lBavAViFIDlTImbKC5Gm2hB0SlBCBMQiB0UjIQA7" /><img data-second src="data:image/gif;base64,R0lGODlhEAAQAMQAAORHHOVSKudfOulrSOp3WOyDZu6QdvCchPGolfO0o/XBs/fNwfjZ0frl3/zy7////wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACH5BAkAABAALAAAAAAQABAAAAVVICSOZGlCQAosJ6mu7fiyZeKqNKToQGDsM8hBADgUXoGAiqhSvp5QAnQKGIgUhwFUYLCVDFCrKUE1lBavAViFIDlTImbKC5Gm2hB0SlBCBMQiB0UjIQA7" /><em>super weird</em></div>`;
+
 
 const renderTree = (node) => {
   const out = [];
@@ -61,10 +61,10 @@ const formatRange = (r) => {
 // "selectionchange" will fire multiple times due to us changing it.
 document.addEventListener('-shadow-selectionchange', () => {
   const ss1 = shadow.getRange(root1);
-  console.info('ss1', ss1, ss1 && ss1.toString());
+  // console.info('ss1', ss1, ss1 && ss1.toString());
   out1.textContent = formatRange(ss1);
   const ss2 = shadow.getRange(root2);
-  console.info('ss2', ss2, ss2 && ss2.toString());
+  // console.info('ss2', ss2, ss2 && ss2.toString());
   out2.textContent = formatRange(ss2);
 });
 
@@ -81,6 +81,7 @@ extendBackward.addEventListener('click', () => {
   <style>
     body {
       font-family: 'Roboto', 'Open Sans', Sans-Serif;
+      /* white-space: pre; */
     }
     main {
       font-size: 2em;
