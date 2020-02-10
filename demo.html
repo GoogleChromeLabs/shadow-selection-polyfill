@@ -22,12 +22,15 @@ import * as shadow from './shadow.js';
 
 const root1 = host1.attachShadow({mode: 'open'});
 host1.style.border = 'blue 4px solid';
-root1.innerHTML = `Starts with space,  but simplest text possible
+root1.innerHTML = `
+
+Starts with space,  but simplest text possible
 
 <style type="ignored">x</style>
 
+<div>
 <strong>stronger</strong> <em>@</em> q<div style="background: #eee"><slot></slot></div><-- slot<div id="host2"></div>
-More DOM text nodes`;
+More DOM text nodes</div>`;
 
 const host2 = root1.getElementById('host2');
 host2.style.border = 'red 4px solid';

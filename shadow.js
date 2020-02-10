@@ -28,6 +28,52 @@ function isValidNode(node) {
   return validNodeTypes.includes(node.nodeType);
 }
 
+
+function findCaretFocus(s, node) {
+  const nodes = node.childNodes;
+  if (!nodes) {
+    return node;
+  }
+
+  for (let i = 0; i < nodes.length; ++i) {
+    const childNode = nodes[i];
+    if (!isValidNode(childNode)) {
+      continue;
+    }
+
+    if (s.containsNode(childNode, true)) {
+      return findCaretFocus(s, childNode);
+    } else if (childNode.shadowRoot) {
+      const shadowResult = findCaretFocus(s, childNode.shadowRoot);
+      if (shadowResult) {
+        return shadowResult;
+      }
+    }
+  }
+
+  // This is gross, but if we can't find a match, then it's probably going to be within a
+  // further shadow root. Let's hope that folks aren't wrapping their whole site in one.
+  if (node instanceof window.ShadowRoot) {
+    const all = node.querySelectorAll('*');
+    for (let i = 0; i < all.length; ++i) {
+      if (all[i].shadowRoot) {
+        const shadowResult = findCaretFocus(s, all[i].shadowRoot);
+        if (shadowResult) {
+          return shadowResult;
+        }
+      }
+    }
+  }
+
+  const root = node.getRootNode();
+  if (root instanceof ShadowRoot) {
+    return root;
+  }
+
+  return node;
+}
+
+
 function findNode(s, parentNode, isLeft) {
   const nodes = parentNode.childNodes || parentNode.children;
   if (!nodes) {
@@ -55,10 +101,11 @@ function findNode(s, parentNode, isLeft) {
   return parentNode;
 }
 
-/**
- * @param {function(!Event)} fn to add to selectionchange internals
- */
-const addInternalListener = (() => {
+
+let recentCaretRange = {node: null, offset: -1};
+
+
+(function() {
   if (hasSelection || useDocument) {
     // getSelection exists or document API can be used
     document.addEventListener('selectionchange', (ev) => {
@@ -68,7 +115,6 @@ const addInternalListener = (() => {
   }
 
   let withinInternals = false;
-  const handlers = [];
 
   document.addEventListener('selectionchange', (ev) => {
     if (withinInternals) {
@@ -77,27 +123,28 @@ const addInternalListener = (() => {
 
     withinInternals = true;
 
+    const s = window.getSelection();
+    if (s.type === 'Caret') {
+      const root = findCaretFocus(s, s.anchorNode);
+      if (root instanceof window.ShadowRoot) {
+        const range = getRange(root);
+        if (range) {
+          const node = range.startContainer;
+          const offset = range.startOffset;
+          recentCaretRange = {node, offset};
+          console.debug('got caret', node, offset);
+        } else {
+          console.warn('could not get range', root);
+        }
+      }
+    }
+
     document.dispatchEvent(new CustomEvent('-shadow-selectionchange'));
     window.requestAnimationFrame(() => {
       withinInternals = false;
     });
-
-    handlers.forEach((fn) => fn(ev));
   });
-
-  return (fn) => handlers.push(fn);
 })();
-
-addInternalListener((ev) => {
-  const s = window.getSelection();
-  if (s.type === 'Caret') {
-    // nb. This is important, it mucks with single-positioned selections enough to make ranges work
-    s.collapseToEnd();
-    s.collapseToStart();
-    s.empty();
-    s.deleteFromDocument();
-  }
-});
 
 
 /**
@@ -155,8 +202,7 @@ function getSelectionDirection(s, leftNode, rightNode) {
     return false;
   }
 
-  // Maybe we were at the end of something. Extend backwards.
-  // TODO(samthor): We seem to be able to get away without the 'backwards' case.
+  // Maybe we were at the end of something. Extend backwards instead.
   s.modify('extend', 'backward', 'character');
   updatedSize = measure();
   debug && console.info(`backward selection: "${s.toString()}"`)
@@ -248,14 +294,14 @@ export function internalGetShadowSelection(root) {
 
     if (isNaturalDirection === undefined) {
       // This occurs when we can't move because we can't extend left or right to measure the
-      // direction we're moving in. Good news though: we don't need to _change_ the selection
-      // to measure it, so just return immediately.
+      // direction we're moving in... because it's the entire range. Hooray!
       range.setStart(leftNode, 0);
       range.setEnd(rightNode, rightNode.length);
       return {range, mode: 'all'};
     }
   }
 
+  const initialSize = s.toString().length;
 
   // Dumbest possible approach: remove characters from left side until no more selection,
   // re-add.
@@ -269,7 +315,6 @@ export function internalGetShadowSelection(root) {
     // This is a caret selection, do nothing.
   } else if (rightNode.nodeType === Node.TEXT_NODE) {
     const rightText = rightNode.textContent;
-    const initialSize = s.toString().length;
     const existingNextSibling = rightNode.nextSibling;
 
     for (let i = rightText.length - 1; i >= 0; --i) {
@@ -291,8 +336,11 @@ export function internalGetShadowSelection(root) {
 
   if (leftNode.nodeType === Node.TEXT_NODE) {
     if (leftNode !== rightNode) {
+      // If we're at the end of a text node, it's impossible to extend the selection, so add an
+      // extra character to select (that we delete later).
+      leftNode.appendData('?');
       s.collapseToStart();
-      s.modify('extend', 'forward', 'character');
+      s.modify('extend', 'right', 'character');
     }
 
     const leftText = leftNode.textContent;
@@ -314,16 +362,25 @@ export function internalGetShadowSelection(root) {
       leftNode.nextSibling.remove();
     }
 
+    if (leftNode !== rightNode) {
+      leftNode.deleteData(leftNode.length - 1, 1);
+    }
+
     if (rightNode === null) {
       rightNode = leftNode;
       rightOffset = leftOffset;
     }
+
+  } else if (rightNode === null) {
+    rightNode = leftNode;
   }
 
-  if (leftNode === rightNode) {
-    console.info('got range', leftNode.textContent.substring(leftOffset, rightOffset), 'nat?', isNaturalDirection);
-  } else {
-    console.warn('wide range');
+  // Work around common browser bug. Single character selction is always seen as 'forward'. Check
+  // if it's actually supposed to be backward.
+  if (initialSize === 1 && recentCaretRange && recentCaretRange.node === leftNode) {
+    if (recentCaretRange.offset > leftOffset && isNaturalDirection) {
+      isNaturalDirection = false;
+    }
   }
 
   if (isNaturalDirection === true) {
@@ -333,11 +390,7 @@ export function internalGetShadowSelection(root) {
     s.collapse(rightNode, rightOffset);
     s.extend(leftNode, leftOffset);
   } else {
-    if (leftNode !== rightNode) {
-      console.warn('cannot do anything with selection', leftOffset, rightOffset);
-    } else {
-      s.setPosition(leftNode, leftOffset);
-    }
+    s.setPosition(leftNode, leftOffset);
   }
 
   range.setStart(leftNode, leftOffset);
