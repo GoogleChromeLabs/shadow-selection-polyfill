@@ -23,6 +23,8 @@ const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent) ||
   /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 const useDocument = !hasShadow || hasShady || (!hasSelection && !isSafari);
 
+const invalidPartialElements = /^(area|base|br|col|command|embed|hr|img|input|keygen|link|meta|param|script|source|style|template|track|wbr)$/;
+
 const validNodeTypes = [Node.ELEMENT_NODE, Node.TEXT_NODE, Node.DOCUMENT_FRAGMENT_NODE];
 function isValidNode(node) {
   return validNodeTypes.includes(node.nodeType);
@@ -93,8 +95,11 @@ function findNode(s, parentNode, isLeft) {
         debug && console.info('found child', childNode);
         return childNode;
       }
-      debug && console.info('descending child', childNode);
-      return findNode(s, childNode, isLeft);
+      // Special-case elements that cannot have feasible children.
+      if (!invalidPartialElements.exec(childNode.localName || '')) {
+        debug && console.info('descending child', childNode);
+        return findNode(s, childNode, isLeft);
+      }
     }
     debug && console.info(parentNode, 'does NOT contain', childNode);
   }
@@ -295,6 +300,7 @@ export function internalGetShadowSelection(root) {
   if (s.type === 'Range') {
     rightNode = findNode(s, root, false);  // get right node here _before_ getSelectionDirection
     isNaturalDirection = getSelectionDirection(s, leftNode, rightNode);
+
     // isNaturalDirection means "going right"
 
     if (isNaturalDirection === undefined) {
