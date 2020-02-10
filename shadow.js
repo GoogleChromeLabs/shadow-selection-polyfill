@@ -246,7 +246,10 @@ function walkFromNode(node, walkForward) {
 
 const cachedRange = new Map();
 export function getRange(root) {
-  if (useDocument) {
+  if (hasShady) {
+    const s = document.getSelection();
+    return s.rangeCount ? s.getRangeAt(0) : null;
+  } else if (useDocument) {  
     // Document pierces Shadow Root for selection, so actively filter it down to the right node.
     // This is only for Firefox, which does not allow selection across Shadow Root boundaries.
     const s = document.getSelection();
