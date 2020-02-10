@@ -132,9 +132,6 @@ let recentCaretRange = {node: null, offset: -1};
           const node = range.startContainer;
           const offset = range.startOffset;
           recentCaretRange = {node, offset};
-          console.debug('got caret', node, offset);
-        } else {
-          console.warn('could not get range', root);
         }
       }
     }
@@ -245,8 +242,16 @@ function walkFromNode(node, walkForward) {
 
 const cachedRange = new Map();
 export function getRange(root) {
-  if (hasSelection || useDocument) {
-    const s = (useDocument ? document : root).getSelection();
+  if (useDocument) {
+    // Document pierces Shadow Root for selection, so actively filter it down to the right node.
+    // This is only for Firefox, which does not allow selection across Shadow Root boundaries.
+    const s = document.getSelection();
+    if (s.containsNode(root, true)) {
+      return s.getRangeAt(0);
+    }
+    return null;
+  } else if (hasSelection) {
+    const s = root.getSelection();
     return s.rangeCount ? s.getRangeAt(0) : null;
   }
 
