@@ -325,7 +325,12 @@ function internalGetShadowSelection(root) {
       // This occurs when we can't move because we can't extend left or right to measure the
       // direction we're moving in... because it's the entire range. Hooray!
       range.setStart(leftNode, 0);
-      range.setEnd(rightNode, rightNode.length);
+
+      let end = rightNode.childNodes.length;
+      if (rightNode instanceof Text) {
+        end = rightNode.length;
+      }
+      range.setEnd(rightNode, end);
       return {range, mode: 'all'};
     }
   }
@@ -361,7 +366,8 @@ function internalGetShadowSelection(root) {
     // they need to maintain.
     textRightNode.insertData(textRightNode.length, rightText.substr(textRightNode.length));
     while (textRightNode.nextSibling !== existingNextSibling) {
-      textRightNode.nextSibling.remove();
+      const s = /** @type {ChildNode} */ (textRightNode.nextSibling);
+      s.remove();
     }
   }
 
@@ -376,7 +382,7 @@ function internalGetShadowSelection(root) {
       s.modify('extend', 'right', 'character');
     }
 
-    const leftText = textLeftNode.textContent;
+    const leftText = textLeftNode.textContent || '';
     const existingNextSibling = textLeftNode.nextSibling;
 
     const start = (textLeftNode === rightNode ? rightOffset : leftText.length - 1);
@@ -390,9 +396,10 @@ function internalGetShadowSelection(root) {
     }
 
     // As above, we don't want to use .normalize().
-    textLeftNode.insertData(textLeftNode.length, textLeftNode.substr(textLeftNode.length));
+    textLeftNode.insertData(textLeftNode.length, leftText.substr(textLeftNode.length));
     while (textLeftNode.nextSibling !== existingNextSibling) {
-      textLeftNode.nextSibling.remove();
+      const s = /** @type {ChildNode} */ (textLeftNode.nextSibling);
+      s.remove();
     }
 
     if (leftNode !== rightNode) {
