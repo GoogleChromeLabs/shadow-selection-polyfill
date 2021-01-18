@@ -35,11 +35,16 @@ function isValidNode(node) {
 
 
 /**
- * @param {!Selection} s selection to use
- * @param {!Node} node to find caret position within a shadow root
- * @return {!Node|!ShadowRoot}
+ * @param {Selection} s selection to use
+ * @param {Node|null} node to find caret position within a shadow root
+ * @return {Node|ShadowRoot|null}
  */
 export function findCaretFocus(s, node) {
+  if (!node) {
+    return null;
+  }
+
+  /** @type {ShadowRoot[]} */
   const pending = [];
   const pushAll = (nodeList) => {
     for (let i = 0; i < nodeList.length; ++i) {
@@ -51,13 +56,16 @@ export function findCaretFocus(s, node) {
 
   // We're told by Safari that a node containing a child with a Shadow Root is selected, but check
   // the node directly too (just in case they change their mind later).
-  if (node.shadowRoot) {
+  if (node instanceof Element && node.shadowRoot) {
     pending.push(node.shadowRoot);
   }
   pushAll(node.childNodes);
 
-  while (pending.length) {
+  for (;;) {
     const root = pending.shift();
+    if (!root) {
+      break;
+    }
 
     for (let i = 0; i < root.childNodes.length; ++i) {
       if (s.containsNode(root.childNodes[i], true)) {
@@ -128,7 +136,7 @@ let recentCaretRange = {node: null, offset: -1};
     withinInternals = true;
 
     const s = window.getSelection();
-    if (s.type === 'Caret') {
+    if (s && s.type === 'Caret') {
       const root = findCaretFocus(s, s.anchorNode);
       if (root instanceof window.ShadowRoot) {
         const range = getRange(root);
@@ -149,8 +157,8 @@ let recentCaretRange = {node: null, offset: -1};
 
 
 /**
- * @param {!Selection} s the window selection to use
- * @param {!Node} node the node to walk from
+ * @param {Selection} s the window selection to use
+ * @param {Node?} node the node to walk from
  * @param {boolean} walkForward should this walk in natural direction
  * @return {boolean} whether the selection contains the following node (even partially)
  */
@@ -172,9 +180,9 @@ function containsNextElement(s, node, walkForward) {
 
 
 /**
- * @param {!Selection} s the window selection to use
- * @param {!Node} leftNode the left node
- * @param {!Node} rightNode the right node
+ * @param {Selection} s the window selection to use
+ * @param {Node} leftNode the left node
+ * @param {Node} rightNode the right node
  * @return {boolean|undefined} whether this has natural direction
  */
 function getSelectionDirection(s, leftNode, rightNode) {
@@ -226,12 +234,12 @@ function getSelectionDirection(s, leftNode, rightNode) {
  * Returns the next valid node (element or text). This is needed as Safari doesn't support
  * TreeWalker inside Shadow DOM. Don't escape shadow roots.
  *
- * @param {!Node} node to start from
+ * @param {Node?} node to start from
  * @param {boolean} walkForward should this walk in natural direction
- * @return {Node} node found, if any
+ * @return {Node?} node found, if any
  */
 function walkFromNode(node, walkForward) {
-  if (!walkForward) {
+  if (!walkForward && node) {
     return node.previousSibling || node.parentNode || null;
   }
   while (node) {
@@ -248,12 +256,12 @@ const cachedRange = new Map();
 export function getRange(root) {
   if (hasShady) {
     const s = document.getSelection();
-    return s.rangeCount ? s.getRangeAt(0) : null;
+    return s && s.rangeCount ? s.getRangeAt(0) : null;
   } else if (useDocument) {  
     // Document pierces Shadow Root for selection, so actively filter it down to the right node.
     // This is only for Firefox, which does not allow selection across Shadow Root boundaries.
     const s = document.getSelection();
-    if (s.containsNode(root, true)) {
+    if (s && s.containsNode(root, true)) {
       return s.getRangeAt(0);
     }
     return null;
@@ -284,7 +292,7 @@ function internalGetShadowSelection(root) {
   // provide selection information at this granularity.
   const s = window.getSelection();
 
-  if (s.type === 'None') {
+  if (!s || s.type === 'None') {
     return {range: null, type: 'none'};
   } else if (!(s.type === 'Caret' || s.type === 'Range')) {
     throw new TypeError('unexpected type: ' + s.type);
@@ -292,6 +300,7 @@ function internalGetShadowSelection(root) {
 
   const leftNode = findNode(s, root, true);
   if (leftNode === root) {
+    debug && console.warn('internal selection bail because leftNode=root');
     return {range: null, mode: 'none'};
   }
 
