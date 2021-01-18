@@ -14,7 +14,7 @@
  * the License.
  */
 
-const debug = false;
+const debug = true;
 
 const hasShadow = 'attachShadow' in Element.prototype && 'getRootNode' in Element.prototype;
 const hasSelection = !!(hasShadow && document.createElement('div').attachShadow({ mode: 'open' }).getSelection);
@@ -83,8 +83,14 @@ export function findCaretFocus(s, node) {
 }
 
 
+/**
+ * @param {Selection} s
+ * @param {Node} parentNode
+ * @param {boolean} isLeft
+ * @return {Node}
+ */
 function findNode(s, parentNode, isLeft) {
-  const nodes = parentNode.childNodes || parentNode.children;
+  const nodes = parentNode.childNodes;
   if (!nodes) {
     return parentNode;  // found it, probably text
   }
@@ -103,7 +109,8 @@ function findNode(s, parentNode, isLeft) {
         return childNode;
       }
       // Special-case elements that cannot have feasible children.
-      if (!invalidPartialElements.exec(childNode.localName || '')) {
+      const localName = childNode instanceof Element ? childNode.localName : '';
+      if (!localName || !invalidPartialElements.exec(localName)) {
         debug && console.info('descending child', childNode);
         return findNode(s, childNode, isLeft);
       }
@@ -336,11 +343,13 @@ function internalGetShadowSelection(root) {
   if (rightNode === null) {
     // This is a caret selection, do nothing.
   } else if (rightNode.nodeType === Node.TEXT_NODE) {
-    const rightText = rightNode.textContent;
-    const existingNextSibling = rightNode.nextSibling;
+    const textRightNode = /** @type {Text} */ (rightNode);
+
+    const rightText = textRightNode.textContent || '';
+    const existingNextSibling = textRightNode.nextSibling;
 
     for (let i = rightText.length - 1; i >= 0; --i) {
-      rightNode.splitText(i);
+      textRightNode.splitText(i);
       const updatedSize = s.toString().length;
       if (updatedSize !== initialSize) {
         rightOffset = i + 1;
@@ -350,28 +359,30 @@ function internalGetShadowSelection(root) {
 
     // We don't use .normalize() here, as the user might already have a weird node arrangement
     // they need to maintain.
-    rightNode.insertData(rightNode.length, rightText.substr(rightNode.length));
-    while (rightNode.nextSibling !== existingNextSibling) {
-      rightNode.nextSibling.remove();
+    textRightNode.insertData(textRightNode.length, rightText.substr(textRightNode.length));
+    while (textRightNode.nextSibling !== existingNextSibling) {
+      textRightNode.nextSibling.remove();
     }
   }
 
   if (leftNode.nodeType === Node.TEXT_NODE) {
-    if (leftNode !== rightNode) {
+    const textLeftNode = /** @type {Text} */ (leftNode);
+
+    if (textLeftNode !== rightNode) {
       // If we're at the end of a text node, it's impossible to extend the selection, so add an
       // extra character to select (that we delete later).
-      leftNode.appendData('?');
+      textLeftNode.appendData('?');
       s.collapseToStart();
       s.modify('extend', 'right', 'character');
     }
 
-    const leftText = leftNode.textContent;
-    const existingNextSibling = leftNode.nextSibling;
+    const leftText = textLeftNode.textContent;
+    const existingNextSibling = textLeftNode.nextSibling;
 
-    const start = (leftNode === rightNode ? rightOffset : leftText.length - 1);
+    const start = (textLeftNode === rightNode ? rightOffset : leftText.length - 1);
 
     for (let i = start; i >= 0; --i) {
-      leftNode.splitText(i);
+      textLeftNode.splitText(i);
       if (s.toString() === '') {
         leftOffset = i;
         break;
@@ -379,13 +390,13 @@ function internalGetShadowSelection(root) {
     }
 
     // As above, we don't want to use .normalize().
-    leftNode.insertData(leftNode.length, leftText.substr(leftNode.length));
-    while (leftNode.nextSibling !== existingNextSibling) {
-      leftNode.nextSibling.remove();
+    textLeftNode.insertData(textLeftNode.length, textLeftNode.substr(textLeftNode.length));
+    while (textLeftNode.nextSibling !== existingNextSibling) {
+      textLeftNode.nextSibling.remove();
     }
 
     if (leftNode !== rightNode) {
-      leftNode.deleteData(leftNode.length - 1, 1);
+      textLeftNode.deleteData(textLeftNode.length - 1, 1);
     }
 
     if (rightNode === null) {
