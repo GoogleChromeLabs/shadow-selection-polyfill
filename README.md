@@ -1,10 +1,11 @@
+⚠️ As of March 2020, it's not clear this polyfill will work on future versions of Safari.
+See [this issue](https://github.com/GoogleChromeLabs/shadow-selection-polyfill/issues/11) for an alternative implementation that provides selection on `contentEditable` areas.
+
 Polyfill for the `shadowRoot.getSelection()` method for Safari 10+.
 [See a demo](https://googlechromelabs.github.io/shadow-selection-polyfill/demo.html)!
 
 Safari supports `.attachShadow()` to create a Shadow Root, but does not support retrieving user selection within this root.
 You can safely use this code with other browsers (Firefox and Chromium), where it'll use the native version.
-
-⚠️ This has been rewritten in February 2020 to fix a number of issues with the older version.
 
 ## Usage
 
